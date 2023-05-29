@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+  <meta charset="utf-8">
+  <title>Medien sichern</title>
+
+  <style>
+    .label    {background-color:yellow; border: 2px solid white; padding: 5px; border-radius: 10px;}
+    .label7   {background-color:red;}
+    .label194 {background-color:green;}
+
+    .buttons button {
+      background-color:#44c767;
+      border-radius:12px;
+      border:1px solid #18ab29;
+      display:inline-block;
+      cursor:pointer;
+      color:#ffffff;
+      font-family:Arial;
+      font-size:17px;
+      padding:20px 50px;
+      text-decoration:none;
+      text-shadow:0px 1px 0px #2f6627;
+      }
+    .buttons button:hover   {background-color:#5cbf2a;}
+    .buttons button:active  {position:relative; top:1px;}
+  </style>
+
+<!-- jquery is needed. For an easy start, i load it from googleapis. CHANGE THIS TO ANY LOCATION, WHICH IS APROPRIATE FOR YOU!  -->
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+<!-- Some functions to read the RFID tags, to change the AFI bit and some helpers -->
+<!-- The functions are not outsourced to an extra file in order to simplify use. Only one file needs to be copied and not two. Feel free to change this -->
+<script language="javascript" type="text/javascript">
+  var urlHost;
+  window.onload = function() {
+    UpdateurlHost();
+    $(".parameter").toggle();
+    $(".msg").toggle();
+    };
+
+  function UpdateurlHost() {
+    WriteLog("#call UpdateurlHost()");
+    urlHost=$("#ServiceURL").val()+":"+$("#ServicePort").val();
+    }
+
+  function ServiceInfo() {
+    WriteLog("#call ServiceInfo()");
+    $.ajax({
+      type: 'GET',
+      url: urlHost+"/ServiceInfo",
+      crossDomain: true,
+      cors: true,
+      dataType: "json",
+      success: function (data) { WriteLog("OK:    "+JSON.stringify(data)); alert("OK:    "+JSON.stringify(data)); },
+      error:   function (data) { WriteLog("ERROR: "+JSON.stringify(data)); }
+      });
+    }
+
+  function GetItems() {
+    WriteLog("#call GetItems()");
+    //Medienliste leeren
+    $(".lables").empty();
+    //Daten via RFIDWebService lesen
+    $.ajax({
+      type: 'GET',
+      url: urlHost + '/rfid/GetItems',
+      crossDomain: true,
+      cors: true,
+      dataType: "json",
+      success: function (data) {
+      //Medienliste leeren ...
+      $(".lables").empty();
+      //... und neu befüllen
+      var myJSON = JSON.stringify(data);
+      WriteLog("OK:     "+ myJSON);
+      if (data.requestSuccess=true && data.responseData.numberOfItems>0){
+        for (var i=0; i < data.responseData.items.length; i++) {
+          $(".lables").append(
+            "<div class='label label"+data.responseData.items[i].afi+" id='"+i+"'>"+
+            "Barcode: <input class='barcode' type='text' value='"+data.responseData.items[i].itemID +"' size='10' />&nbsp;"+
+            "(Teil "+data.responseData.items[i].partNumber +"&nbsp;"+
+            "von " +data.responseData.items[i].numberOfParts +")&nbsp;"+
+            "AFI: <input type='text' value='"+data.responseData.items[i].afi +"' size='2' />&nbsp;"+
+            "<button type='button' name='Checkout' onclick='CheckoutItem(`"+data.responseData.items[i].itemID+"`)' >Entsichern</button>"+
+            "<button type='button' name='Checkin'  onclick='CheckinItem(`"+data.responseData.items[i].itemID+"`)'  >Sichern</button>"+
+            "</div>"
+            );
+          }
+        }
+      },
+      error: function (data) { $(".lables").empty(); WriteLog("ERROR: "+JSON.stringify(data)) }
+    });
+  }
+
+  function CheckoutItem(barcode){
+    WriteLog("#call CheckoutItem("+barcode+")");
+    $.ajax({
+      type: 'POST',
+      crossDomain: true,
+      cors: true,
+      contentType: 'application/json; charset=UTF-8',
+      url: urlHost + "/CheckoutItems",
+      dataType: "json",
+      data: '{ "items": [{"itemID": "' + barcode + '"}]}',
+      success: function (data) {
+        WriteLog("OK:    "+JSON.stringify(data));
+        GetItems();
+        },
+      error: function(data) { WriteLog("ERROR: RFIDWebService CheckinItems calling error " + data); }
+      });
+  }
+
+  function CheckinItem(barcode){
+    WriteLog("#call CheckinItem("+barcode+")");
+    $.ajax({
+      type: 'POST',
+      crossDomain: true,
+      cors: true,
+      contentType: 'application/json; charset=UTF-8',
+      url: urlHost + "/CheckinItems",
+      dataType: "json",
+      data: '{ "items": [{"itemID": "' + barcode + '"}]}',
+      success: function (data) {
+        WriteLog("OK:    "+JSON.stringify(data))
+        GetItems();
+        },
+      error: function(data) { WriteLog("ERROR: RFIDWebService CheckinItems calling error " + data); }
+      });
+  }
+
+  function CheckinAllItems(){
+    WriteLog("#call CheckinAllItems()");
+    if ($(".barcode").length == 0)
+      { alert("Keine Medien in der Liste. Bitte erst die Medien einlesen.") }
+    else {
+      $(".barcode").each(function(){
+        CheckinItem($(this).val());
+        })
+      }
+  }
+
+  function CheckoutAllItems(){
+    WriteLog("#call CheckoutAllItems()");
+    if ($(".barcode").length == 0)
+      { alert("Keine Medien in der Liste. Bitte erst die Medien einlesen.") }
+    else {
+      $(".barcode").each(function(){
+        CheckoutItem($(this).val());
+        })
+    }
+  }
+
+  function WriteLog(myJSON){
+    $(".messages").prepend(Date.now()+": "+myJSON+"<br />");
+  }
+</script>
+
+</head>
+<body>
+  <header></header>
+  <main>
+    <!-- ################################################################ -->
+    <!-- Parameter -->
+      <button id="toggleParameter" onclick='$(".parameter").toggle();'>Parameter ein-/ausblenden</button>
+      <button id="toggleLog" onclick='$(".msg").toggle();'>Log ein-/ausblenden</button>
+      <button id="emptyLog" onclick='$(".messages").empty();'>Log leeren</button>
+      <button type=""button" name="GetServiceInfo" onclick="ServiceInfo();">ServicInfo</button>
+
+    <div class="parameter">
+    <h3>Parameter</h3>
+      URL:  <input id="ServiceURL"  type="text" value="https://127.0.0.1" onchange="UpdateurlHost();"/>
+      Port: <input id="ServicePort" type="text" value="10004" onchange="UpdateurlHost" />
+    </div></br>
+
+    <!-- ################################################################ -->
+    <!-- Die Button-Leiste -->
+    <div class="buttons" style="background-color:grey; button{}">
+      <button type=""button" name="GetItems" onclick="GetItems();"         >Medien einlesen</button>
+      <button type=""button" name="CheckoutAllItems" onclick="CheckoutAllItems();" >Alle entsichern</button>
+      <button type=""button" name="CheckinAllItems"  onclick="CheckinAllItems();"  >Alle sichern</button>
+    </div>
+
+    <!-- ################################################################ -->
+    <!-- hier kommen die Label rein -->
+    <div class="lbl">
+      <div class"lblheader"><h3>Medien</h3></div>
+      <div class="lables">noch keine Medien eingelesen!</div>
+    </div>
+
+    <!-- ################################################################ -->
+    <!-- Die Nachrichten -->
+    <div class="msg">
+      <div class"msgheader"><h3>Meldungen</h3></div>
+      <div class="messages"> </div>
+    </div>
+  </main>
+  <footer></footer>
+</body>
+</html>
